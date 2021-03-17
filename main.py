@@ -1,7 +1,8 @@
 import logging
 import logging.config
 import json
-import asyncio
+import time
+
 from typing import List
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -24,8 +25,6 @@ load_cities(redis_instance)
 
 logger.info("Waiting websocket connections...")
 
-loop = asyncio.get_event_loop()
-
 #Websocket connection handler
 class ConnectionManager:
     def __init__(self):
@@ -45,51 +44,30 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-@app.websocket("/weather")
-async def manage_requests(websocket: WebSocket):
-    await manager.connect(websocket)
-    data = json.loads(await websocket.receive_text())
-    if data["route"] == "get_city_coords":
-        loop.run_until_complete(await get_city_coords(websocket, data))
-    elif data["route"] == "get_city_weather":
-        loop.run_until_complete(await get_city_weather(websocket, data))
-    #manager.disconnect(websocket)
-
-# Function to get city coords from redis database 
-# Input: websocket: Websocket connection
-# Output: response: json object with the city coords
-# Author: Diego Águila
-# Date: 16-03-2021
-# @app.websocket("/get_city_coords")
-async def get_city_coords(websocket: WebSocket, data: json):
-    try:
-        while True:
-            name = data["name"]
-            logging.info("Trying to get %s city coords", name)
-            data = redis_instance.hgetall(name)
-            lon = data["lon"]
-            lat = data["lat"]
-            response = '{"opt":"1", "name": "' + name + '", "lon": "' + lon + '", "lat": "' + lat + '"}'
-            await manager.send_data(response, websocket)
-            logging.info(f"Successfully sent longitude: {lon} and latitude {lat} from {name}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-
 # Function to get city weather from openweather API 
 # Input: websocket: Websocket connection
 # Output: response: json object with the city weather info
 # Author: Diego Águila
 # Date: 16-03-2021
-# @app.websocket("/get_city_weather")
-async def get_city_weather(websocket: WebSocket, data: json):
+@app.websocket("/weather")
+async def get_city_weather(websocket: WebSocket):
+    await manager.connect(websocket)
     try:
         while True:
-            data = await websocket.receive_text()
-            lon = data["lon"]
-            lat = data["lat"]
-            response = openweather_city_weather(lon, lat)
-            await manager.send_data(response, websocket)
-            logger.info(f"Successfully sent weather info on longitude: {lon} and latitude: {lat}")
+            cities_string = await websocket.receive_text()
+            cities = cities_string.split(",")
+            weatherData = []
+            print(cities)
+            for city in cities:
+                print(city)
+                data = redis_instance.hgetall(city)
+                lon = data["lon"]
+                lat = data["lat"]
+                cityWeather = openweather_city_weather(lon,lat)
+                weatherData.append(cityWeather)
+            weatherData = json.dumps(weatherData)
+            await manager.send_data(weatherData, websocket)
+            logger.info(f"Successfully sent weather info of cities")
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        await manager.disconnect(websocket)
         logger.info(f"Communication ended.")

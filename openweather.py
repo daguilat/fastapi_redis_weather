@@ -23,7 +23,7 @@ def openweather_city_weather(longitude: str, latitude: str):
             redis_instance.hset("api.errors", datetime.datetime.strftime(datetime.datetime.now(), '%Y-%m-%d %H:%M:%S'), "How unfortunate! The API Request Failed")
       else:
             error = False
-   url = 'http://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}'.format(latitude,longitude,API_KEY)
+   url = 'http://api.openweathermap.org/data/2.5/weather?lat={}&lon={}&appid={}&units=metric'.format(latitude,longitude,API_KEY)
    response = requests.get(url).json()
 
    if response:
